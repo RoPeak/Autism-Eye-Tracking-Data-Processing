@@ -7,6 +7,7 @@
 import os
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 # Function to traverse the directory, load CSVs, and combine into a single DataFrame
@@ -207,6 +208,79 @@ def output_data(data, cleaned, smoothed, averages, averages_emotions,
     return
 
 
+# Plotting function to visualise the average PD and FD of ASD vs TD groups
+def plot_averages(averages):
+    groups = ['ASD', 'TD']
+    metrics = ['PD', 'FD']
+
+    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+    for i, metric in enumerate(metrics):
+        means = [averages.loc[group, f'{metric}_avg'] for group in groups]
+        stds = [averages.loc[group, f'{metric}_std'] for group in groups]
+        axs[i].bar(groups,
+                   means,
+                   yerr=stds,
+                   capsize=5,
+                   color=['blue', 'orange'])
+        axs[i].set_title(f'{metric} Averages by Group')
+        axs[i].set_ylabel(f'{metric} (mean ± std)')
+        axs[i].set_xlabel('Group')
+
+    plt.tight_layout()
+    plt.show()
+
+
+# Plotting function to visualise the trends in the smoothed data
+def plot_smoothed_trends(data, group, metric):
+    participants = data[data['Group'] == group]['Participant'].unique()
+    plt.figure(figsize=(12, 6))
+    for participant in participants:
+        participant_data = data[data['Participant'] == participant]
+        plt.plot(participant_data.index,
+                 participant_data[metric],
+                 label=f'Participant {participant}')
+    plt.title(f'{metric} Trends for {group} Group')
+    plt.xlabel('Index')
+    plt.ylabel(metric)
+    plt.legend()
+    plt.show()
+
+
+# Plotting function for average FD for ROI 1 and 2 for ASD vs TD groups
+def plot_fd_by_roi(fd_averages):
+    groups = ['ASD', 'TD']
+    rois = [1, 2]
+    x = range(len(groups))
+
+    face_means = [fd_averages.loc[(group, 1), 'FD_avg'] for group in groups]
+    nonface_means = [fd_averages.loc[(group, 2), 'FD_avg'] for group in groups]
+
+    face_stds = [fd_averages.loc[(group, 1), 'FD_std'] for group in groups]
+    nonface_stds = [fd_averages.loc[(group, 2), 'FD_std'] for group in groups]
+
+    width = 0.4
+    plt.bar(x,
+            face_means,
+            width,
+            yerr=face_stds,
+            label='Face',
+            color='green',
+            capsize=5)
+    plt.bar([i + width for i in x],
+            nonface_means,
+            width,
+            yerr=nonface_stds,
+            label='Non-Face',
+            color='red',
+            capsize=5)
+
+    plt.title('Fixation Duration by ROI and Group')
+    plt.xticks([i + width / 2 for i in x], groups)
+    plt.ylabel('Fixation Duration (mean ± std)')
+    plt.legend()
+    plt.show()
+
+
 # Main execution
 if __name__ == "__main__":
     original_data = load_data("autism_data_4101")
@@ -216,10 +290,14 @@ if __name__ == "__main__":
     smoothed_data = smooth_data(cleaned_data)
 
     averages = calculate_averages_by_group(smoothed_data)
+    plot_averages(averages)
 
     averages_by_emotion = calculate_averages_by_group_emotion(smoothed_data)
+    plot_smoothed_trends(smoothed_data, 'ASD', 'PD')
+    plot_smoothed_trends(smoothed_data, 'TD', 'FD')
 
     fd_averages = calculate_average_FD_by_ROI(smoothed_data)
+    plot_fd_by_roi(fd_averages)
 
     print("Would you like to save the processed data to CSV files? (y/n)")
     ans = input(">>> ")
