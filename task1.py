@@ -8,6 +8,7 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 # Function to traverse the directory, load CSVs, and combine into a single DataFrame
@@ -132,25 +133,42 @@ def compute_mean_std(df, col):
 def calculate_averages_by_group_emotion(data):
     print("BEGIN: calculate_averages_by_group_emotion()")
     print("Calculating averages...")
+    # Create a dictionary to store results
     results = {}
+
+    # Iterate over each emotion
     for emotion in ["Angry", "Happy", "Neutral"]:
+        results[emotion] = {}
         emotion_data = data[data['Emotion'] == emotion]
-        pd_mean, pd_std = compute_mean_std(emotion_data, 'PD')
-        fd_mean, fd_std = compute_mean_std(emotion_data, 'FD')
-        results[emotion] = {'PD': (pd_mean, pd_std), 'FD': (fd_mean, fd_std)}
-    print("Would you like to view the averages by emotion? (y/n)")
+
+        # For each emotion, calculate statistics for ASD and TD separately
+        for group in ["ASD", "TD"]:
+            group_emotion_data = emotion_data[emotion_data['Group'] == group]
+            pd_mean, pd_std = compute_mean_std(group_emotion_data, 'PD')
+            fd_mean, fd_std = compute_mean_std(group_emotion_data, 'FD')
+
+            # Store the results in the dictionary
+            results[emotion][group] = {
+                'PD': (pd_mean, pd_std),
+                'FD': (fd_mean, fd_std)
+            }
+
+    # Display results if desired
+    print("Would you like to view the averages by emotion and group? (y/n)")
     ans = input(">>> ")
     if ans.lower() == "y":
         print("Round by how many decimal places?")
         decimal_places = int(input(">>> "))
         for emotion, stats in results.items():
             print(f"Emotion: {emotion}")
-            print(
-                f"PD average: {round(stats['PD'][0], decimal_places)} ± {round(stats['PD'][1], decimal_places)}"
-            )
-            print(
-                f"FD average: {round(stats['FD'][0], decimal_places)} ± {round(stats['FD'][1], decimal_places)}"
-            )
+            for group, metrics in stats.items():
+                print(f"  Group: {group}")
+                print(
+                    f"    PD average: {round(metrics['PD'][0], decimal_places)} ± {round(metrics['PD'][1], decimal_places)}"
+                )
+                print(
+                    f"    FD average: {round(metrics['FD'][0], decimal_places)} ± {round(metrics['FD'][1], decimal_places)}"
+                )
     print("END: calculate_averages_by_group_emotion()\n")
     return results
 
@@ -246,6 +264,103 @@ def plot_smoothed_trends(data, group, metric):
     plt.show()
 
 
+# Plotting function to visualise the average PD and FD of ASD vs TD groups by emotion
+def plot_emotion_group_averages(results):
+    # Flatten the `results` dictionary into a DataFrame for easier plotting
+    data_for_plot = []
+    for emotion, group_data in results.items():
+        for group, metrics in group_data.items():
+            data_for_plot.append({
+                'Emotion': emotion,
+                'Group': group,
+                'Metric': 'PD',
+                'Average': metrics['PD'][0],
+                'StdDev': metrics['PD'][1]
+            })
+            data_for_plot.append({
+                'Emotion': emotion,
+                'Group': group,
+                'Metric': 'FD',
+                'Average': metrics['FD'][0],
+                'StdDev': metrics['FD'][1]
+            })
+
+    # Convert to a pandas DataFrame
+    plot_df = pd.DataFrame(data_for_plot)
+
+    # Separate PD and FD into two subplots
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6), sharey=False)
+
+    # Calculate dynamic upper bounds for y-axis
+    pd_data = plot_df[plot_df['Metric'] == 'PD']
+    fd_data = plot_df[plot_df['Metric'] == 'FD']
+    pd_ymax = (pd_data['Average'] + pd_data['StdDev']).max()
+    fd_ymax = (fd_data['Average'] + fd_data['StdDev']).max()
+
+    # Plot for Pupil Diameter (PD)
+    sns.barplot(
+        data=pd_data,
+        x='Emotion',
+        y='Average',
+        hue='Group',
+        ax=axes[0],
+        errorbar=None,  # Disable automatic error bars
+        palette="coolwarm")
+    axes[0].set_title("Average Pupil Diameter (PD) by Emotion and Group")
+    axes[0].set_ylabel("Average PD")
+    axes[0].set_xlabel("Emotion")
+    axes[0].legend(title="Group")
+    axes[0].set_ylim(0, pd_ymax * 1.1)  # Add 10% buffer
+
+    # Add custom error bars for PD
+    for container, group in zip(axes[0].containers, ["ASD", "TD"]):
+        group_data = pd_data[pd_data["Group"] == group]
+        for bar, (_, row) in zip(container, group_data.iterrows()):
+            bar_x = bar.get_x() + bar.get_width() / 2
+            axes[0].errorbar(
+                bar_x,
+                row["Average"],
+                yerr=row["StdDev"],
+                fmt="none",
+                color="black",
+                capsize=5,
+                linewidth=1,
+            )
+
+    # Plot for Fixation Duration (FD)
+    sns.barplot(
+        data=fd_data,
+        x='Emotion',
+        y='Average',
+        hue='Group',
+        ax=axes[1],
+        errorbar=None,  # Disable automatic error bars
+        palette="viridis")
+    axes[1].set_title("Average Fixation Duration (FD) by Emotion and Group")
+    axes[1].set_ylabel("Average FD")
+    axes[1].set_xlabel("Emotion")
+    axes[1].legend(title="Group")
+    axes[1].set_ylim(0, fd_ymax * 1.1)  # Add 10% buffer
+
+    # Add custom error bars for FD
+    for container, group in zip(axes[1].containers, ["ASD", "TD"]):
+        group_data = fd_data[fd_data["Group"] == group]
+        for bar, (_, row) in zip(container, group_data.iterrows()):
+            bar_x = bar.get_x() + bar.get_width() / 2
+            axes[1].errorbar(
+                bar_x,
+                row["Average"],
+                yerr=row["StdDev"],
+                fmt="none",
+                color="black",
+                capsize=5,
+                linewidth=1,
+            )
+
+    plt.tight_layout()
+    plt.show()
+
+
 # Plotting function for average FD for ROI 1 and 2 for ASD vs TD groups
 def plot_fd_by_roi(fd_averages):
     groups = ['ASD', 'TD']
@@ -293,8 +408,7 @@ if __name__ == "__main__":
     plot_averages(averages)
 
     averages_by_emotion = calculate_averages_by_group_emotion(smoothed_data)
-    plot_smoothed_trends(smoothed_data, 'ASD', 'PD')
-    plot_smoothed_trends(smoothed_data, 'TD', 'FD')
+    plot_emotion_group_averages(averages_by_emotion)
 
     fd_averages = calculate_average_FD_by_ROI(smoothed_data)
     plot_fd_by_roi(fd_averages)
